@@ -1,0 +1,108 @@
+---
+- name: ensure folderstructure exists
+  file:
+    path: $HOME/.config/nvim
+    state: directory
+
+- name: Install YARN YUM repo.
+  become: yes
+  yum_repository:
+    name: yarn
+    description: Yarn Repository
+    baseurl: "{{ yarn_rhel_repo_url }}"
+    enabled: yes
+    gpgcheck: yes
+    gpgkey: "{{ yarn_rhel_repo_gpg_key_url }}"
+    state: present
+
+- name: Check if EPEL repo is already configured.
+  become: yes
+  stat:
+    path: "{{ epel_repofile_path }}"
+  register: epel_repofile_result
+
+- name: Import EPEL GPG key.
+  become: yes
+  rpm_key:
+    key: "{{ epel_repo_gpg_key_url }}"
+    state: present
+  register: result
+  until: result is succeeded
+  retries: 5
+  delay: 10
+  when: not epel_repofile_result.stat.exists
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Install EPEL repo.
+  become: yes
+  yum:
+    name: "{{ epel_repo_url }}"
+    state: present
+  register: result
+  until: result is succeeded
+  retries: 5
+  delay: 10
+  when: not epel_repofile_result.stat.exists
+
+- name: Disable Main EPEL repo.
+  become: yes
+  ini_file:
+    path: "/etc/yum.repos.d/epel.repo"
+    section: epel
+    option: enabled
+    value: "{{ epel_repo_disable | ternary(0, 1) }}"
+    mode: 0644
+
+- name: install nodejs 17 for neovim language server
+  become: yes
+  shell: curl -fsSL https://rpm.nodesource.com/setup_17.x | bash -
+  args:
+    warn: no
+
+- name: install dependencies
+  become: yes
+  yum:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+      - git
+      - stow
+      - tmux 
+      - fuse-sshfs
+      - curl
+      - nodejs
+      - yarn
+  when: "ansible_os_family == 'RedHat'"
+
+- name: neovim install python provider
+  pip:
+    name: "{{ item }}" 
+    executable: pip3
+    extra_args: --user
+  with_items:
+    - pynvim
+    - jedi
+
+- name: download neovim app image
+  get_url:
+    url: "https://github.com/neovim/neovim/releases/download/{{ nvim_version }}/nvim.appimage"
+    dest: $HOME/.local/bin/nvim
+    mode: '0755'
+
+- name: checkout dotfiles
+  git:
+    repo: "https://github.com/flhenv/dotfiles.git"
+    dest: $HOME/dotfiles
+
+- name: stow tmux
+  command: stow -v tmux
+  args:
+    chdir: $HOME/dotfiles
+
+- name: stow neovim
+  command: stow -v --target=$HOME/.config/nvim nvim
+  args:
+    chdir: $HOME/dotfiles
+
+

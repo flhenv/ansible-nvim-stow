@@ -1,0 +1,9 @@
+---
+- hosts: all
+  gather_facts: yes
+  vars:
+    nvim_version: v0.5.1
+    yarn_rhel_repo_url: "https://dl.yarnpkg.com/rpm/"
+    yarn_rhel_repo_gpg_key_url: "https://dl.yarnpkg.com/rpm/pubkey.gpg"
+  roles:
+    - init_env
